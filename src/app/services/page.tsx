@@ -1,3 +1,4 @@
+// src/app/services/page.tsx
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -16,32 +17,20 @@ import {
     MapPin,
     Package,
     TrendingUp,
+    Tag,
 } from 'lucide-react';
 import api from '@/lib/api';
+import { ServiceListItem, ServiceCategory, SubscriptionPackage } from '@/types';
 
-interface Service {
-    id: string;
-    name: string;
-    provider_name: string;
-    category_name: string;
-    base_price: string;
-    subscription_price: string | null;
-    unit: string;
-    is_available: boolean;
-    current_stock: number;
-}
-
-interface Category {
-    id: string;
-    name: string;
-    slug: string;
+interface ServiceWithPackages extends ServiceListItem {
+    packages?: SubscriptionPackage[];
 }
 
 export default function ServicesPage() {
     const { isAuthenticated, isLoading } = useAuth();
     const router = useRouter();
-    const [services, setServices] = useState<Service[]>([]);
-    const [categories, setCategories] = useState<Category[]>([]);
+    const [services, setServices] = useState<ServiceWithPackages[]>([]);
+    const [categories, setCategories] = useState<ServiceCategory[]>([]);
     const [loading, setLoading] = useState(true);
     const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
     const [searchQuery, setSearchQuery] = useState('');
@@ -64,7 +53,7 @@ export default function ServicesPage() {
     const fetchCategories = async () => {
         try {
             const response = await api.get('/services/categories/');
-            const data = extractPaginatedData<Category>(response.data);
+            const data = extractPaginatedData<ServiceCategory>(response.data);
             setCategories(data);
         } catch (error) {
             console.error('Error fetching categories:', error);
@@ -74,8 +63,24 @@ export default function ServicesPage() {
     const fetchServices = async () => {
         try {
             const response = await api.get('/services/services/');
-            const data = extractPaginatedData<Service>(response.data);
-            setServices(data);
+            const servicesData = extractPaginatedData<ServiceListItem>(response.data);
+            
+            // Fetch packages for each service
+            const servicesWithPackages = await Promise.all(
+                servicesData.map(async (service) => {
+                    try {
+                        const packagesResponse = await api.get(`/services/services/${service.id}/packages/`);
+                        const packages = Array.isArray(packagesResponse.data) 
+                            ? packagesResponse.data 
+                            : packagesResponse.data.results || [];
+                        return { ...service, packages };
+                    } catch (error) {
+                        return { ...service, packages: [] };
+                    }
+                })
+            );
+            
+            setServices(servicesWithPackages);
         } catch (error) {
             console.error('Error fetching services:', error);
         } finally {
@@ -85,7 +90,6 @@ export default function ServicesPage() {
 
     const filteredServices = services
         .filter((service) => {
-            // Search filter
             if (searchQuery) {
                 const query = searchQuery.toLowerCase();
                 return (
@@ -97,14 +101,12 @@ export default function ServicesPage() {
             return true;
         })
         .filter((service) => {
-            // Category filter
             if (selectedCategory !== 'all') {
                 return service.category_name === selectedCategory;
             }
             return true;
         })
         .sort((a, b) => {
-            // Sorting
             if (sortBy === 'price-low') {
                 return parseFloat(a.base_price) - parseFloat(b.base_price);
             } else if (sortBy === 'price-high') {
@@ -126,7 +128,6 @@ export default function ServicesPage() {
 
     return (
         <DashboardLayout>
-            {/* Header */}
             <div className="mb-8">
                 <h1 className="text-3xl font-bold text-gray-900">Browse Services</h1>
                 <p className="text-gray-600 mt-2">
@@ -137,7 +138,6 @@ export default function ServicesPage() {
             {/* Filters Bar */}
             <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 mb-6">
                 <div className="flex flex-col lg:flex-row lg:items-center gap-4">
-                    {/* Search */}
                     <div className="flex-1 relative">
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-5 h-5" />
                         <input
@@ -149,7 +149,6 @@ export default function ServicesPage() {
                         />
                     </div>
 
-                    {/* Category Filter */}
                     <select
                         value={selectedCategory}
                         onChange={(e) => setSelectedCategory(e.target.value)}
@@ -163,7 +162,6 @@ export default function ServicesPage() {
                         ))}
                     </select>
 
-                    {/* Sort */}
                     <select
                         value={sortBy}
                         onChange={(e) => setSortBy(e.target.value)}
@@ -174,30 +172,26 @@ export default function ServicesPage() {
                         <option value="price-high">Price: High to Low</option>
                     </select>
 
-                    {/* View Toggle */}
                     <div className="flex items-center space-x-2 bg-gray-100 rounded-lg p-1">
                         <button
                             onClick={() => setViewMode('grid')}
-                            className={`p-2 rounded ${viewMode === 'grid'
-                                ? 'bg-white shadow-sm'
-                                : 'text-gray-600 hover:text-gray-900'
-                                }`}
+                            className={`p-2 rounded ${
+                                viewMode === 'grid' ? 'bg-white shadow-sm' : 'text-gray-600 hover:text-gray-900'
+                            }`}
                         >
                             <Grid3x3 size={20} />
                         </button>
                         <button
                             onClick={() => setViewMode('list')}
-                            className={`p-2 rounded ${viewMode === 'list'
-                                ? 'bg-white shadow-sm'
-                                : 'text-gray-600 hover:text-gray-900'
-                                }`}
+                            className={`p-2 rounded ${
+                                viewMode === 'list' ? 'bg-white shadow-sm' : 'text-gray-600 hover:text-gray-900'
+                            }`}
                         >
                             <List size={20} />
                         </button>
                     </div>
                 </div>
 
-                {/* Results count */}
                 <div className="mt-4 text-sm text-gray-600">
                     Showing {filteredServices.length} of {services.length} services
                 </div>
@@ -207,27 +201,13 @@ export default function ServicesPage() {
             {filteredServices.length === 0 ? (
                 <div className="text-center py-12">
                     <Package className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-                    <h3 className="text-lg font-medium text-gray-900 mb-2">
-                        No services found
-                    </h3>
-                    <p className="text-gray-600">
-                        Try adjusting your search or filters
-                    </p>
+                    <h3 className="text-lg font-medium text-gray-900 mb-2">No services found</h3>
+                    <p className="text-gray-600">Try adjusting your search or filters</p>
                 </div>
             ) : (
-                <div
-                    className={
-                        viewMode === 'grid'
-                            ? 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6'
-                            : 'space-y-4'
-                    }
-                >
+                <div className={viewMode === 'grid' ? 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6' : 'space-y-4'}>
                     {filteredServices.map((service) => (
-                        <ServiceCard
-                            key={service.id}
-                            service={service}
-                            viewMode={viewMode}
-                        />
+                        <ServiceCard key={service.id} service={service} viewMode={viewMode} />
                     ))}
                 </div>
             )}
@@ -235,14 +215,14 @@ export default function ServicesPage() {
     );
 }
 
-// Service Card Component
-function ServiceCard({
-    service,
-    viewMode,
-}: {
-    service: Service;
-    viewMode: 'grid' | 'list';
-}) {
+function ServiceCard({ service, viewMode }: { service: ServiceWithPackages; viewMode: 'grid' | 'list' }) {
+    const hasPackages = service.packages && service.packages.length > 0;
+    const bestPackage = hasPackages && service.packages
+        ? service.packages.reduce((best, pkg) => 
+            parseFloat(pkg.savings) > parseFloat(best.savings) ? pkg : best
+          )
+        : null;
+
     if (viewMode === 'list') {
         return (
             <Link href={`/services/${service.id}`}>
@@ -250,9 +230,7 @@ function ServiceCard({
                     <div className="flex items-center justify-between">
                         <div className="flex-1">
                             <div className="flex items-center space-x-3 mb-2">
-                                <h3 className="text-lg font-bold text-gray-900">
-                                    {service.name}
-                                </h3>
+                                <h3 className="text-lg font-bold text-gray-900">{service.name}</h3>
                                 {service.is_available ? (
                                     <span className="px-2 py-1 bg-green-100 text-green-700 text-xs font-medium rounded-full">
                                         Available
@@ -277,18 +255,15 @@ function ServiceCard({
                             <div className="flex items-center space-x-4">
                                 <div>
                                     <span className="text-sm text-gray-600">One-time: </span>
-                                    <span className="text-lg font-bold text-gray-900">
-                                        ₹{service.base_price}
-                                    </span>
+                                    <span className="text-lg font-bold text-gray-900">₹{service.base_price}</span>
                                     <span className="text-sm text-gray-600">/{service.unit}</span>
                                 </div>
-                                {service.subscription_price && (
-                                    <div>
-                                        <span className="text-sm text-gray-600">Subscription: </span>
-                                        <span className="text-lg font-bold text-green-600">
-                                            ₹{service.subscription_price}
+                                {bestPackage && (
+                                    <div className="flex items-center px-3 py-1 bg-green-50 rounded-lg">
+                                        <TrendingUp size={16} className="text-green-600 mr-1" />
+                                        <span className="text-sm font-medium text-green-600">
+                                            Save ₹{parseFloat(bestPackage.savings).toFixed(0)} with subscription
                                         </span>
-                                        <span className="text-sm text-gray-600">/month</span>
                                     </div>
                                 )}
                             </div>
@@ -303,21 +278,23 @@ function ServiceCard({
         );
     }
 
-    // Grid View
     return (
         <Link href={`/services/${service.id}`}>
             <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden hover:shadow-md transition-shadow cursor-pointer h-full flex flex-col">
-                {/* Image placeholder */}
-                <div className="h-48 bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center">
+                <div className="h-48 bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center relative">
                     <Package className="w-16 h-16 text-white opacity-50" />
+                    {bestPackage && parseFloat(bestPackage.savings) > 0 && (
+                        <div className="absolute top-4 right-4">
+                            <div className="bg-green-500 text-white px-3 py-1 rounded-full text-xs font-bold">
+                                SAVE ₹{parseFloat(bestPackage.savings).toFixed(0)}
+                            </div>
+                        </div>
+                    )}
                 </div>
 
                 <div className="p-6 flex-1 flex flex-col">
-                    {/* Header */}
                     <div className="flex items-start justify-between mb-3">
-                        <h3 className="text-lg font-bold text-gray-900 flex-1">
-                            {service.name}
-                        </h3>
+                        <h3 className="text-lg font-bold text-gray-900 flex-1">{service.name}</h3>
                         {service.is_available ? (
                             <span className="px-2 py-1 bg-green-100 text-green-700 text-xs font-medium rounded-full">
                                 Available
@@ -329,39 +306,33 @@ function ServiceCard({
                         )}
                     </div>
 
-                    {/* Provider */}
                     <div className="flex items-center text-sm text-gray-600 mb-2">
                         <MapPin size={14} className="mr-1" />
                         {service.provider_name}
                     </div>
 
-                    {/* Category */}
                     <span className="inline-block px-2 py-1 bg-indigo-50 text-indigo-600 rounded-full text-xs font-medium mb-4 w-fit">
                         {service.category_name}
                     </span>
 
-                    {/* Pricing */}
                     <div className="mt-auto">
-                        <div className="mb-2">
+                        <div className="mb-3">
                             <span className="text-sm text-gray-600">One-time: </span>
-                            <span className="text-xl font-bold text-gray-900">
-                                ₹{service.base_price}
-                            </span>
+                            <span className="text-xl font-bold text-gray-900">₹{service.base_price}</span>
                             <span className="text-sm text-gray-600">/{service.unit}</span>
                         </div>
 
-                        {service.subscription_price && (
-                            <div className="flex items-center justify-between p-3 bg-green-50 rounded-lg mb-4">
-                                <div>
-                                    <p className="text-xs text-green-600 font-medium">
-                                        SUBSCRIPTION
-                                    </p>
-                                    <p className="text-lg font-bold text-green-600">
-                                        ₹{service.subscription_price}
-                                        <span className="text-sm font-normal">/month</span>
-                                    </p>
+                        {hasPackages && service.packages && (
+                            <div className="mb-4">
+                                <div className="flex items-center justify-between p-3 bg-green-50 rounded-lg">
+                                    <div>
+                                        <p className="text-xs text-green-600 font-medium">SUBSCRIPTION</p>
+                                        <p className="text-sm text-gray-900">
+                                            {service.packages.length} package{service.packages.length > 1 ? 's' : ''} available
+                                        </p>
+                                    </div>
+                                    <TrendingUp className="text-green-600" size={20} />
                                 </div>
-                                <TrendingUp className="text-green-600" size={20} />
                             </div>
                         )}
 
