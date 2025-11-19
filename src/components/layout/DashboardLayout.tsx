@@ -19,6 +19,7 @@ import {
   BarChart3,
   Users,
   Droplets,
+  CreditCard
 } from 'lucide-react';
 
 interface DashboardLayoutProps {
@@ -36,7 +37,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
       return [
         { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
         { name: 'Browse Services', href: '/services', icon: Store },
-        { name: 'My Subscriptions', href: '/subscriptions', icon: Package },
+        { name: 'My Prepaid Cards', href: '/prepaid-cards', icon: CreditCard },
         { name: 'My Orders', href: '/orders', icon: ShoppingCart },
         { name: 'Profile', href: '/profile', icon: User },
       ];

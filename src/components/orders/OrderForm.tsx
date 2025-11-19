@@ -17,6 +17,7 @@ interface OrderFormProps {
     supports_immediate_delivery: boolean;
   };
   quantity: number;
+  quantityLabel: string; // ADD THIS
   onSuccess: () => void;
   onCancel: () => void;
 }
@@ -24,20 +25,21 @@ interface OrderFormProps {
 export default function OrderForm({
   service,
   quantity,
+  quantityLabel,
   onSuccess,
   onCancel,
 }: OrderFormProps) {
   const [deliveryType, setDeliveryType] = useState<'immediate' | 'scheduled'>(
     service.supports_immediate_delivery ? 'immediate' : 'scheduled'
   );
-  
+
   const [formData, setFormData] = useState({
     delivery_address: '',
     scheduled_date: '',
     scheduled_time: '',
     notes: '',
   });
-  
+
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
 
@@ -55,7 +57,7 @@ export default function OrderForm({
         const selectedDate = new Date(formData.scheduled_date);
         const today = new Date();
         today.setHours(0, 0, 0, 0);
-        
+
         if (selectedDate < today) {
           newErrors.scheduled_date = 'Delivery date cannot be in the past';
         }
@@ -92,8 +94,8 @@ export default function OrderForm({
     try {
       const orderData: any = {
         service_id: service.id,
-        order_type: 'one_time',
         quantity: quantity,
+        quantity_label: quantityLabel, // ADD THIS
         delivery_type: deliveryType,
         delivery_address: formData.delivery_address,
         notes: formData.notes,
@@ -105,13 +107,13 @@ export default function OrderForm({
       }
 
       await api.post('/orders/', orderData);
-      
+
       toast.success(
         deliveryType === 'immediate'
           ? 'Order placed! We\'ll deliver within 1-2 hours.'
           : 'Order scheduled successfully!'
       );
-      
+
       onSuccess();
     } catch (error: any) {
       console.error('Error creating order:', error);
@@ -170,11 +172,10 @@ export default function OrderForm({
             <button
               type="button"
               onClick={() => setDeliveryType('immediate')}
-              className={`p-4 border-2 rounded-lg transition-all text-left ${
-                deliveryType === 'immediate'
+              className={`p-4 border-2 rounded-lg transition-all text-left ${deliveryType === 'immediate'
                   ? 'border-indigo-600 bg-indigo-50'
                   : 'border-gray-300 hover:border-gray-400'
-              }`}
+                }`}
             >
               <div className="flex items-center space-x-2 mb-2">
                 <Zap
@@ -189,11 +190,10 @@ export default function OrderForm({
             <button
               type="button"
               onClick={() => setDeliveryType('scheduled')}
-              className={`p-4 border-2 rounded-lg transition-all text-left ${
-                deliveryType === 'scheduled'
+              className={`p-4 border-2 rounded-lg transition-all text-left ${deliveryType === 'scheduled'
                   ? 'border-indigo-600 bg-indigo-50'
                   : 'border-gray-300 hover:border-gray-400'
-              }`}
+                }`}
             >
               <div className="flex items-center space-x-2 mb-2">
                 <Calendar
@@ -244,9 +244,8 @@ export default function OrderForm({
                 name="scheduled_time"
                 value={formData.scheduled_time}
                 onChange={handleInputChange}
-                className={`w-full pl-10 pr-4 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none text-gray-900 ${
-                  errors.scheduled_time ? 'border-red-500' : 'border-gray-300'
-                }`}
+                className={`w-full pl-10 pr-4 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none text-gray-900 ${errors.scheduled_time ? 'border-red-500' : 'border-gray-300'
+                  }`}
               />
             </div>
             {errors.scheduled_time && (

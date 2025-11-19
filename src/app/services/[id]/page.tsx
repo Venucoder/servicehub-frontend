@@ -6,7 +6,7 @@ import { useRouter, useParams } from 'next/navigation';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import Link from 'next/link';
 import Modal from '@/components/common/Modal';
-import SubscriptionForm from '@/components/subscriptions/SubscriptionForm';
+import PrepaidCardForm from '@/components/prepaid-cards/PrepaidCardForm';
 import OrderForm from '@/components/orders/OrderForm';
 import {
     ArrowLeft,
@@ -22,10 +22,11 @@ import {
     Tag,
     Clock,
     Zap,
+    CreditCard,
 } from 'lucide-react';
 import api from '@/lib/api';
 import toast from 'react-hot-toast';
-import { Service, SubscriptionPackage } from '@/types';
+import { Service, PrepaidCardOption } from '@/types';
 
 export default function ServiceDetailPage() {
     const { isAuthenticated, isLoading: authLoading } = useAuth();
@@ -34,11 +35,11 @@ export default function ServiceDetailPage() {
     const serviceId = params.id as string;
 
     const [service, setService] = useState<Service | null>(null);
-    const [packages, setPackages] = useState<SubscriptionPackage[]>([]);
+    const [cardOptions, setCardOptions] = useState<PrepaidCardOption[]>([]);
     const [loading, setLoading] = useState(true);
-    const [selectedMode, setSelectedMode] = useState<'one_time' | 'subscription'>('subscription');
-    const [selectedPackage, setSelectedPackage] = useState<SubscriptionPackage | null>(null);
+    const [selectedMode, setSelectedMode] = useState<'one_time' | 'prepaid_card'>('one_time');
     const [quantity, setQuantity] = useState(1);
+    const [selectedQuantityOption, setSelectedQuantityOption] = useState<string>('');
     const [showModal, setShowModal] = useState(false);
 
     useEffect(() => {
@@ -50,7 +51,7 @@ export default function ServiceDetailPage() {
     useEffect(() => {
         if (isAuthenticated && serviceId) {
             fetchServiceDetail();
-            fetchPackages();
+            fetchPrepaidCardOptions();
         }
     }, [isAuthenticated, serviceId]);
 
@@ -58,6 +59,12 @@ export default function ServiceDetailPage() {
         try {
             const response = await api.get(`/services/services/${serviceId}/`);
             setService(response.data);
+            
+            // Set default quantity option if available
+            if (response.data.quantity_options && response.data.quantity_options.length > 0) {
+                setSelectedQuantityOption(response.data.quantity_options[0].label);
+                setQuantity(response.data.quantity_options[0].value);
+            }
         } catch (error) {
             console.error('Error fetching service detail:', error);
             toast.error('Failed to load service details');
@@ -66,29 +73,28 @@ export default function ServiceDetailPage() {
         }
     };
 
-    const fetchPackages = async () => {
+    const fetchPrepaidCardOptions = async () => {
         try {
-            const response = await api.get(`/services/services/${serviceId}/packages/`);
-            const packagesData = Array.isArray(response.data) ? response.data : response.data.results || [];
-            setPackages(packagesData);
-            if (packagesData.length > 0) {
-                setSelectedPackage(packagesData[0]);
-            }
+            const response = await api.get(`/services/services/${serviceId}/prepaid_card_options/`);
+            const options = Array.isArray(response.data) ? response.data : response.data.results || [];
+            setCardOptions(options);
         } catch (error) {
-            console.error('Error fetching packages:', error);
+            console.error('Error fetching prepaid card options:', error);
         }
     };
 
-    const handleModeChange = (mode: 'one_time' | 'subscription') => {
+    const handleModeChange = (mode: 'one_time' | 'prepaid_card') => {
         setSelectedMode(mode);
-        if (mode === 'subscription' && packages.length > 0 && !selectedPackage) {
-            setSelectedPackage(packages[0]);
-        }
+    };
+
+    const handleQuantityOptionChange = (option: any) => {
+        setSelectedQuantityOption(option.label);
+        setQuantity(option.value);
     };
 
     const handleProceed = () => {
-        if (selectedMode === 'subscription' && !selectedPackage) {
-            toast.error('Please select a subscription package');
+        if (selectedMode === 'prepaid_card' && cardOptions.length === 0) {
+            toast.error('No prepaid card options available');
             return;
         }
         setShowModal(true);
@@ -141,6 +147,7 @@ export default function ServiceDetailPage() {
 
     const serviceOpen = isServiceOpen();
     const canOrderImmediate = service.supports_immediate_delivery && serviceOpen;
+    const hasPrepaidCards = service.supports_prepaid_cards && cardOptions.length > 0;
 
     return (
         <DashboardLayout>
@@ -206,35 +213,39 @@ export default function ServiceDetailPage() {
                                 </div>
                             </div>
 
-                            {/* Subscription Packages */}
-                            {packages.length > 0 && (
+                            {/* Prepaid Card Options */}
+                            {hasPrepaidCards && (
                                 <div>
-                                    <h3 className="text-lg font-bold text-gray-900 mb-4">Subscription Packages</h3>
+                                    <h3 className="text-lg font-bold text-gray-900 mb-4">Prepaid Card Options</h3>
                                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                                        {packages.map((pkg) => (
-                                            <div
-                                                key={pkg.id}
-                                                className="p-4 border-2 border-gray-200 rounded-lg hover:border-green-500 transition-all cursor-pointer relative"
-                                            >
-                                                {parseFloat(pkg.savings) > 0 && (
-                                                    <div className="absolute top-2 right-2">
-                                                        <span className="px-2 py-1 bg-green-500 text-white text-xs font-bold rounded">
-                                                            SAVE ₹{parseFloat(pkg.savings).toFixed(0)}
-                                                        </span>
-                                                    </div>
-                                                )}
-                                                <h4 className="font-semibold text-gray-900 mb-2">{pkg.name}</h4>
-                                                <div className="text-2xl font-bold text-green-600 mb-2">₹{pkg.price}</div>
-                                                <p className="text-sm text-gray-600 mb-1">{pkg.units} units</p>
-                                                <p className="text-xs text-gray-500">
-                                                    ₹{parseFloat(pkg.price_per_unit).toFixed(2)} per unit
-                                                </p>
-                                            </div>
-                                        ))}
+                                        {cardOptions.map((option) => {
+                                            const savings = parseFloat(option.savings);
+                                            
+                                            return (
+                                                <div
+                                                    key={option.id}
+                                                    className="p-4 border-2 border-gray-200 rounded-lg hover:border-green-500 transition-all cursor-pointer relative"
+                                                >
+                                                    {savings > 0 && (
+                                                        <div className="absolute top-2 right-2">
+                                                            <span className="px-2 py-1 bg-green-500 text-white text-xs font-bold rounded">
+                                                                SAVE ₹{savings.toFixed(0)}
+                                                            </span>
+                                                        </div>
+                                                    )}
+                                                    <h4 className="font-semibold text-gray-900 mb-2">{option.name}</h4>
+                                                    <div className="text-2xl font-bold text-green-600 mb-2">₹{option.price}</div>
+                                                    <p className="text-sm text-gray-600 mb-1">{option.total_units} units</p>
+                                                    <p className="text-xs text-gray-500">
+                                                        ₹{parseFloat(option.price_per_unit).toFixed(2)} per unit
+                                                    </p>
+                                                </div>
+                                            );
+                                        })}
                                     </div>
                                     <div className="mt-4 p-3 bg-blue-50 rounded-lg text-sm text-blue-800">
-                                        <strong>💡 How it works:</strong> Buy units upfront, use them at your own pace. 
-                                        No expiry date! For pickups or scheduled delivery.
+                                        <strong>💡 How it works:</strong> Buy units upfront at a discount, use them at your own pace. 
+                                        No expiry! Visit shop anytime and show your digital card.
                                     </div>
                                 </div>
                             )}
@@ -272,47 +283,6 @@ export default function ServiceDetailPage() {
                                     ))}
                                 </div>
                             )}
-                            {service.supports_immediate_delivery && (
-                                <div className="flex items-center space-x-2 text-sm text-gray-600">
-                                    <Zap size={16} className="text-orange-500" />
-                                    <span>Immediate delivery available (within {service.immediate_delivery_time} minutes)</span>
-                                </div>
-                            )}
-                        </div>
-                    </div>
-
-                    {/* Service Features */}
-                    <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-                        <h3 className="text-lg font-bold text-gray-900 mb-4">Service Features</h3>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <div className="flex items-start space-x-3">
-                                <CheckCircle2 className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
-                                <div>
-                                    <p className="font-medium text-gray-900">Quality Assured</p>
-                                    <p className="text-sm text-gray-600">Premium quality guaranteed</p>
-                                </div>
-                            </div>
-                            <div className="flex items-start space-x-3">
-                                <CheckCircle2 className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
-                                <div>
-                                    <p className="font-medium text-gray-900">Flexible Usage</p>
-                                    <p className="text-sm text-gray-600">Use subscription units at your pace</p>
-                                </div>
-                            </div>
-                            <div className="flex items-start space-x-3">
-                                <CheckCircle2 className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
-                                <div>
-                                    <p className="font-medium text-gray-900">Pause Anytime</p>
-                                    <p className="text-sm text-gray-600">Pause or cancel subscriptions easily</p>
-                                </div>
-                            </div>
-                            <div className="flex items-start space-x-3">
-                                <CheckCircle2 className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
-                                <div>
-                                    <p className="font-medium text-gray-900">Digital Tracking</p>
-                                    <p className="text-sm text-gray-600">Track usage in real-time</p>
-                                </div>
-                            </div>
                         </div>
                     </div>
 
@@ -371,7 +341,7 @@ export default function ServiceDetailPage() {
                     </div>
                 </div>
 
-                {/* Right Column - Order/Subscribe Section */}
+                {/* Right Column - Purchase Options */}
                 <div className="lg:col-span-1">
                     <div className="bg-white rounded-xl shadow-lg border border-gray-200 p-6 sticky top-24">
                         <h3 className="text-xl font-bold text-gray-900 mb-6">Get Started</h3>
@@ -395,95 +365,92 @@ export default function ServiceDetailPage() {
                                         size={24}
                                     />
                                     <p className="text-sm font-medium text-gray-900">One-time</p>
-                                    <p className="text-xs text-gray-600">₹{service.base_price}/{service.unit}</p>
+                                    <p className="text-xs text-gray-600">Buy now</p>
                                 </button>
 
-                                {packages.length > 0 && (
+                                {hasPrepaidCards && (
                                     <button
-                                        onClick={() => handleModeChange('subscription')}
+                                        onClick={() => handleModeChange('prepaid_card')}
                                         className={`p-4 border-2 rounded-lg transition-all ${
-                                            selectedMode === 'subscription'
+                                            selectedMode === 'prepaid_card'
                                                 ? 'border-green-600 bg-green-50'
                                                 : 'border-gray-300 hover:border-gray-400'
                                         }`}
                                     >
-                                        <Calendar
+                                        <CreditCard
                                             className={`mx-auto mb-2 ${
-                                                selectedMode === 'subscription' ? 'text-green-600' : 'text-gray-600'
+                                                selectedMode === 'prepaid_card' ? 'text-green-600' : 'text-gray-600'
                                             }`}
                                             size={24}
                                         />
-                                        <p className="text-sm font-medium text-gray-900">Subscribe</p>
+                                        <p className="text-sm font-medium text-gray-900">Prepaid Card</p>
                                         <p className="text-xs text-gray-600">Save more</p>
                                     </button>
                                 )}
                             </div>
                         </div>
 
-                        {/* One-time: Quantity */}
+                        {/* One-time: Quantity Selector */}
                         {selectedMode === 'one_time' && (
                             <div className="mb-6">
-                                <label className="block text-sm font-medium text-gray-700 mb-2">Quantity</label>
-                                <div className="flex items-center space-x-3">
-                                    <button
-                                        onClick={() => setQuantity(Math.max(service.minimum_order, quantity - 1))}
-                                        className="w-12 h-12 flex items-center justify-center bg-white border-2 border-gray-300 rounded-lg hover:bg-gray-50 hover:border-indigo-600 transition-all text-gray-700 font-bold text-xl"
+                                <label className="block text-sm font-medium text-gray-700 mb-2">Select Quantity</label>
+                                {service.quantity_options && service.quantity_options.length > 0 ? (
+                                    <select
+                                        value={selectedQuantityOption}
+                                        onChange={(e) => {
+                                            const option = service.quantity_options.find(o => o.label === e.target.value);
+                                            if (option) handleQuantityOptionChange(option);
+                                        }}
+                                        className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:border-indigo-600 focus:ring-2 focus:ring-indigo-200 outline-none text-gray-900"
                                     >
-                                        −
-                                    </button>
-                                    <div className="flex-1">
-                                        <input
-                                            type="number"
-                                            value={quantity}
-                                            onChange={(e) =>
-                                                setQuantity(Math.max(service.minimum_order, parseInt(e.target.value) || 1))
-                                            }
-                                            className="w-full text-center border-2 border-gray-300 rounded-lg py-3 font-bold text-xl text-gray-900 focus:border-indigo-600 focus:ring-2 focus:ring-indigo-200 outline-none"
-                                            min={service.minimum_order}
-                                        />
-                                        <p className="text-center text-xs text-gray-500 mt-1">{service.unit}(s)</p>
+                                        {service.quantity_options.map((option) => (
+                                            <option key={option.label} value={option.label}>
+                                                {option.label} - ₹{option.price}
+                                            </option>
+                                        ))}
+                                    </select>
+                                ) : (
+                                    <div className="flex items-center space-x-3">
+                                        <button
+                                            onClick={() => setQuantity(Math.max(service.minimum_order, quantity - 1))}
+                                            className="w-12 h-12 flex items-center justify-center bg-white border-2 border-gray-300 rounded-lg hover:bg-gray-50 hover:border-indigo-600 transition-all text-gray-700 font-bold text-xl"
+                                        >
+                                            −
+                                        </button>
+                                        <div className="flex-1">
+                                            <input
+                                                type="number"
+                                                value={quantity}
+                                                onChange={(e) =>
+                                                    setQuantity(Math.max(service.minimum_order, parseInt(e.target.value) || 1))
+                                                }
+                                                className="w-full text-center border-2 border-gray-300 rounded-lg py-3 font-bold text-xl text-gray-900 focus:border-indigo-600 focus:ring-2 focus:ring-indigo-200 outline-none"
+                                                min={service.minimum_order}
+                                            />
+                                            <p className="text-center text-xs text-gray-500 mt-1">{service.unit}(s)</p>
+                                        </div>
+                                        <button
+                                            onClick={() => setQuantity(quantity + 1)}
+                                            className="w-12 h-12 flex items-center justify-center bg-white border-2 border-gray-300 rounded-lg hover:bg-gray-50 hover:border-indigo-600 transition-all text-gray-700 font-bold text-xl"
+                                        >
+                                            +
+                                        </button>
                                     </div>
-                                    <button
-                                        onClick={() => setQuantity(quantity + 1)}
-                                        className="w-12 h-12 flex items-center justify-center bg-white border-2 border-gray-300 rounded-lg hover:bg-gray-50 hover:border-indigo-600 transition-all text-gray-700 font-bold text-xl"
-                                    >
-                                        +
-                                    </button>
-                                </div>
+                                )}
                             </div>
                         )}
 
-                        {/* Subscription: Package Selection */}
-                        {selectedMode === 'subscription' && packages.length > 0 && (
+                        {/* Prepaid Card: Show best option */}
+                        {selectedMode === 'prepaid_card' && cardOptions.length > 0 && (
                             <div className="mb-6">
-                                <label className="block text-sm font-medium text-gray-700 mb-2">Select Package</label>
-                                <div className="space-y-2">
-                                    {packages.map((pkg) => (
-                                        <button
-                                            key={pkg.id}
-                                            onClick={() => setSelectedPackage(pkg)}
-                                            className={`w-full p-3 border-2 rounded-lg text-left transition-all ${
-                                                selectedPackage?.id === pkg.id
-                                                    ? 'border-green-600 bg-green-50'
-                                                    : 'border-gray-300 hover:border-gray-400'
-                                            }`}
-                                        >
-                                            <div className="flex items-center justify-between">
-                                                <div>
-                                                    <p className="font-semibold text-gray-900">{pkg.name}</p>
-                                                    <p className="text-sm text-gray-600">{pkg.units} units</p>
-                                                </div>
-                                                <div className="text-right">
-                                                    <p className="font-bold text-green-600">₹{pkg.price}</p>
-                                                    {parseFloat(pkg.savings) > 0 && (
-                                                        <p className="text-xs text-green-600">
-                                                            Save ₹{parseFloat(pkg.savings).toFixed(0)}
-                                                        </p>
-                                                    )}
-                                                </div>
-                                            </div>
-                                        </button>
-                                    ))}
+                                <label className="block text-sm font-medium text-gray-700 mb-2">Prepaid Cards Available</label>
+                                <div className="p-4 bg-green-50 border-2 border-green-200 rounded-lg">
+                                    <p className="text-sm font-semibold text-green-900 mb-1">
+                                        {cardOptions.length} option{cardOptions.length > 1 ? 's' : ''} available
+                                    </p>
+                                    <p className="text-xs text-green-700">
+                                        Click proceed to select your preferred card
+                                    </p>
                                 </div>
                             </div>
                         )}
@@ -491,12 +458,14 @@ export default function ServiceDetailPage() {
                         {/* Price Summary */}
                         <div className="mb-6 p-4 bg-gray-50 rounded-lg">
                             <div className="flex items-center justify-between">
-                                <span className="text-gray-600">Total</span>
+                                <span className="text-gray-600">
+                                    {selectedMode === 'one_time' ? 'Total' : 'Starting from'}
+                                </span>
                                 <span className="font-bold text-indigo-600 text-2xl">
                                     ₹
-                                    {selectedMode === 'subscription' && selectedPackage
-                                        ? selectedPackage.price
-                                        : (parseFloat(service.base_price) * quantity).toFixed(2)}
+                                    {selectedMode === 'one_time'
+                                        ? (parseFloat(service.base_price) * quantity).toFixed(2)
+                                        : cardOptions[0]?.price || '0'}
                                 </span>
                             </div>
                         </div>
@@ -507,7 +476,7 @@ export default function ServiceDetailPage() {
                             disabled={!service.is_available}
                             className="w-full py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
                         >
-                            {selectedMode === 'subscription' ? 'Subscribe Now' : 'Place Order'}
+                            {selectedMode === 'prepaid_card' ? 'Buy Prepaid Card' : 'Place Order'}
                         </button>
 
                         {service.has_stock_tracking && service.current_stock > 0 && (
@@ -519,20 +488,20 @@ export default function ServiceDetailPage() {
                 </div>
             </div>
 
-            {/* Modal - Single modal for both forms */}
+            {/* Modal */}
             <Modal
                 isOpen={showModal}
                 onClose={() => setShowModal(false)}
-                title={selectedMode === 'subscription' ? 'Create Subscription' : 'Place Order'}
+                title={selectedMode === 'prepaid_card' ? 'Buy Prepaid Card' : 'Place Order'}
                 size="lg"
             >
-                {selectedMode === 'subscription' && selectedPackage ? (
-                    <SubscriptionForm
-                        package={selectedPackage}
+                {selectedMode === 'prepaid_card' ? (
+                    <PrepaidCardForm
+                        options={cardOptions}
                         serviceName={service.name}
                         onSuccess={() => {
                             setShowModal(false);
-                            router.push('/subscriptions');
+                            router.push('/prepaid-cards');
                         }}
                         onCancel={() => setShowModal(false)}
                     />
@@ -546,6 +515,7 @@ export default function ServiceDetailPage() {
                             supports_immediate_delivery: service.supports_immediate_delivery,
                         }}
                         quantity={quantity}
+                        quantityLabel={selectedQuantityOption || `${quantity} ${service.unit}`}
                         onSuccess={() => {
                             setShowModal(false);
                             router.push('/orders');

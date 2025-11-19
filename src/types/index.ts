@@ -1,3 +1,5 @@
+// src/types/index.ts - Refactored for Phase 1
+
 export interface User {
   id: string;
   username: string;
@@ -48,7 +50,10 @@ export interface AuthContextType {
   isLoading: boolean;
 }
 
+// ============================================
 // Service Types
+// ============================================
+
 export interface ServiceCategory {
   id: string;
   name: string;
@@ -72,15 +77,22 @@ export interface ServiceProvider {
   created_at: string;
 }
 
+// Quantity option for one-time orders
+export interface QuantityOption {
+  label: string;  // "250ml", "1 Liter", "2 Liters"
+  value: number;  // 0.25, 1, 2
+  price: string;  // "15.00", "60.00", "120.00"
+}
+
 export interface Service {
   id: string;
   provider: ServiceProvider;
   category: ServiceCategory;
   name: string;
   description: string;
-  pricing_type: 'per_unit' | 'subscription' | 'both';
   base_price: string;
   unit: string;
+  quantity_options: QuantityOption[];
   minimum_order: number;
   is_active: boolean;
   is_available: boolean;
@@ -91,6 +103,7 @@ export interface Service {
   operating_days: string[];
   supports_immediate_delivery: boolean;
   immediate_delivery_time: number;
+  supports_prepaid_cards: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -105,15 +118,19 @@ export interface ServiceListItem {
   is_available: boolean;
   current_stock: number;
   supports_immediate_delivery: boolean;
+  supports_prepaid_cards: boolean;
 }
 
-// Subscription Package Types
-export interface SubscriptionPackage {
+// ============================================
+// Prepaid Card Types (NEW!)
+// ============================================
+
+export interface PrepaidCardOption {
   id: string;
   service: string;
   service_name: string;
   name: string;
-  units: number;
+  total_units: string;
   price: string;
   price_per_unit: string;
   savings: string;
@@ -122,72 +139,65 @@ export interface SubscriptionPackage {
   created_at: string;
 }
 
-// Subscription Types
-export interface Subscription {
+export interface PrepaidCard {
   id: string;
   customer: User;
-  package: SubscriptionPackage;
-  status: 'active' | 'paused' | 'completed' | 'cancelled';
-  delivery_type: 'self_pickup' | 'auto_delivery';
-  total_units: number;
-  used_units: number;
-  remaining_units: number;
+  card_option: PrepaidCardOption;
+  status: 'active' | 'exhausted' | 'cancelled';
+  total_units: string;
+  used_units: string;
+  remaining_units: string;
   total_amount: string;
   per_unit_price: string;
-  delivery_address?: string;
-  preferred_time?: string;
-  delivery_days?: string[];
-  units_per_delivery?: number;
-  usage_history?: SubscriptionUsage[];
-  created_at: string;
-  updated_at: string;
-  paused_at?: string;
-  completed_at?: string;
+  purchased_at: string;
+  last_used_at?: string;
+  exhausted_at?: string;
   cancelled_at?: string;
 }
 
-export interface SubscriptionListItem {
+export interface PrepaidCardListItem {
   id: string;
   service_name: string;
-  package_name: string;
-  status: 'active' | 'paused' | 'completed' | 'cancelled';
-  delivery_type: 'self_pickup' | 'auto_delivery';
-  total_units: number;
-  used_units: number;
-  remaining_units: number;
-  created_at: string;
+  card_name: string;
+  status: 'active' | 'exhausted' | 'cancelled';
+  total_units: string;
+  used_units: string;
+  remaining_units: string;
+  purchased_at: string;
+  last_used_at?: string;
 }
 
-export interface SubscriptionUsage {
+export interface CardUsage {
   id: string;
-  subscription: string;
-  units_used: number;
-  usage_type: 'pickup' | 'delivered';
-  picked_up_at?: string;
-  delivered_at?: string;
-  delivered_by?: string;
+  card: string;
+  units_used: string;
+  marked_by: string;
+  marked_by_name: string;
   notes: string;
-  created_at: string;
+  used_at: string;
 }
 
-export interface CreateSubscriptionRequest {
-  package_id: string;
-  delivery_type: 'self_pickup' | 'auto_delivery';
-  delivery_address?: string;
-  preferred_time?: string;
-  delivery_days?: string[];
-  units_per_delivery?: number;
+export interface CreatePrepaidCardRequest {
+  card_option_id: string;
 }
 
+export interface UseCardRequest {
+  units: number;
+  notes?: string;
+}
+
+// ============================================
 // Order Types
+// ============================================
+
 export interface Order {
   id: string;
   order_number: string;
   customer: User;
   service: ServiceListItem;
-  order_type: 'one_time';
   status: 'pending' | 'confirmed' | 'processing' | 'out_for_delivery' | 'completed' | 'cancelled' | 'refunded';
-  quantity: number;
+  quantity: string;
+  quantity_label: string;
   unit_price: string;
   total_amount: string;
   delivery_type: 'immediate' | 'scheduled';
@@ -206,17 +216,21 @@ export interface Order {
 export interface OrderListItem {
   id: string;
   order_number: string;
+  customer_name: string;
   service_name: string;
   status: string;
+  delivery_type: string;
+  quantity: string;
+  quantity_label: string;
   total_amount: string;
-  delivery_date?: string;
+  scheduled_date?: string;
   created_at: string;
 }
 
 export interface CreateOrderRequest {
   service_id: string;
-  order_type: 'one_time';
   quantity: number;
+  quantity_label: string;
   delivery_type: 'immediate' | 'scheduled';
   delivery_address: string;
   scheduled_date?: string;
@@ -224,13 +238,16 @@ export interface CreateOrderRequest {
   notes?: string;
 }
 
+// ============================================
 // Payment Types
+// ============================================
+
 export interface Payment {
   id: string;
   transaction_id: string;
   customer: User;
   order?: OrderListItem;
-  subscription?: SubscriptionListItem;
+  prepaid_card?: PrepaidCardListItem;
   amount: string;
   payment_method: 'cash' | 'upi' | 'card' | 'wallet' | 'netbanking';
   status: 'pending' | 'processing' | 'completed' | 'failed' | 'refunded';
@@ -240,4 +257,14 @@ export interface Payment {
   created_at: string;
   updated_at: string;
   completed_at?: string;
+}
+
+export interface PaymentListItem {
+  id: string;
+  transaction_id: string;
+  customer_name: string;
+  amount: string;
+  payment_method: string;
+  status: string;
+  created_at: string;
 }
